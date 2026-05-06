@@ -113,12 +113,13 @@ jobs:
           
           rm "downloads/${FILENAME}"
           
-          echo "split_dir=${SPLIT_DIR}" >> $GITHUB_OUTPUT
+          PART_COUNT=$(ls -1 "${SPLIT_DIR}" | wc -l)
+          echo "part_count=${PART_COUNT}" >> $GITHUB_OUTPUT
           echo "split=true" >> $GITHUB_OUTPUT
+          echo "basename=${BASENAME}" >> $GITHUB_OUTPUT
+          echo "split_dir=${SPLIT_DIR}" >> $GITHUB_OUTPUT
           
-          ls -1 "${SPLIT_DIR}" > /tmp/parts_list.txt
-          
-          echo "File split completed in: ${SPLIT_DIR}"
+          echo "File split into ${PART_COUNT} parts in: ${SPLIT_DIR}"
 
       - name: Commit and push all files
         if: steps.download-file.outputs.filename != ''
@@ -166,52 +167,41 @@ jobs:
 
             ⏰ Time remaining until cleanup: End of today (23:59 UTC)
 
-      - name: Generate download links for split parts
-        id: generate-links
+      - name: Generate links and comment for split files
         if: steps.split-file.outputs.split == 'true'
         env:
-          FILENAME: ${{ steps.download-file.outputs.filename }}
+          REPO: ${{ github.repository }}
+          SPLIT_DIR: ${{ steps.split-file.outputs.split_dir }}
         run: |
-          BASENAME="${FILENAME%.*}"
-          SPLIT_DIR="downloads/${BASENAME}_parts"
+          echo "## ✅ Large file downloaded and split successfully!" > /tmp/comment-body.md
+          echo "" >> /tmp/comment-body.md
+          echo "📁 **Original filename:** \`${{ steps.download-file.outputs.filename }}\`" >> /tmp/comment-body.md
+          echo "" >> /tmp/comment-body.md
+          echo "📊 **Original size:** ${{ steps.download-file.outputs.size_mb }} MB" >> /tmp/comment-body.md
+          echo "" >> /tmp/comment-body.md
+          echo "---" >> /tmp/comment-body.md
+          echo "" >> /tmp/comment-body.md
+          echo "### 📥 Direct download links:" >> /tmp/comment-body.md
+          echo "" >> /tmp/comment-body.md
           
-          echo "Generating download links..."
-          
-          LINKS=""
-          for part in "${SPLIT_DIR}"/*; do
+          for part in ${SPLIT_DIR}/*; do
             PART_NAME=$(basename "${part}")
-            PART_LINK="https://github.com/${{ github.repository }}/raw/main/${SPLIT_DIR}/${PART_NAME}"
-            LINKS="${LINKS}${PART_LINK}\n"
+            echo "https://github.com/${REPO}/raw/main/${SPLIT_DIR}/${PART_NAME}" >> /tmp/comment-body.md
+            echo "" >> /tmp/comment-body.md
           done
           
-          echo -e "${LINKS}" > /tmp/links.txt
+          echo "---" >> /tmp/comment-body.md
+          echo "" >> /tmp/comment-body.md
+          echo "⏰ Time remaining until cleanup: End of today (23:59 UTC)" >> /tmp/comment-body.md
           
-          echo "basename=${BASENAME}" >> $GITHUB_OUTPUT
+          cat /tmp/comment-body.md
 
-      - name: Comment download links on Issue (large file split)
+      - name: Post comment for split files
         if: steps.split-file.outputs.split == 'true'
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.issue.number }}
-          body: |
-            ## ✅ Large file downloaded and split successfully!
-
-            📁 **Original filename:** `${{ steps.download-file.outputs.filename }}`
-            
-            📊 **Original size:** ${{ steps.download-file.outputs.size_mb }} MB
-            
-            ---
-
-            ### 📥 Direct download links:
-
-            $(cat /tmp/links.txt)
-
-            ---
-
-            ⏰ Time remaining until cleanup: End of today (23:59 UTC)
-            
-            ---
-            *🤖 This message was sent by the downloader bot.*
+          body-file: /tmp/comment-body.md
 
       - name: Close Issue
         if: steps.download-file.outputs.filename != ''
