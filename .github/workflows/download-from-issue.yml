@@ -31,11 +31,17 @@ jobs:
           EOF
           )
           
+          TITLE="${{ github.event.issue.title }}"
+          
           URL=$(echo "$BODY" | grep -o 'https://[^[:space:]]*' | head -1)
           
           if [ -z "$URL" ]; then
+            URL=$(echo "$TITLE" | grep -o 'https://[^[:space:]]*' | head -1)
+          fi
+          
+          if [ -z "$URL" ]; then
             echo "skip=true" >> $GITHUB_OUTPUT
-            echo "::notice::No link found in Issue. Stopping."
+            echo "::notice::No link found in Issue body or title. Stopping."
             exit 0
           fi
           
